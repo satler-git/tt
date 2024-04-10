@@ -24,7 +24,9 @@ function getJsonMusicQueue(acquired = 0) {
     objectArray.push(item);
   }
 
-  const modifiedJson = removeNullsFromArray(objectArray);
+  const modifiedJson = {
+    contents: removeNullsFromArray(objectArray)
+  };
   const json = JSON.stringify(modifiedJson);
 
   return json;
