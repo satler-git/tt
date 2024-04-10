@@ -82,7 +82,7 @@ async fn play_music(search_word_list: [String; 2]) {
     let video_id = search_youtube(search_word_list).await;
 
     match Command::new("mpv")
-        .args(["-fs", &video_id])
+        .args(["-fs", "--volume=50", &video_id])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .output()
