@@ -1,7 +1,15 @@
+//! ## configについて
+//! * `end_time`: [h, m, s]
+//! 24h表記
+//! * `api_key`
+//! gasのデプロイID
+
 use chrono::{DateTime, FixedOffset, NaiveTime, Utc};
 use serde_derive::{Deserialize, Serialize};
 use std::process::{Command, Stdio};
 use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
+use directories::ProjectDirs;
+use rusqlite::{params, Connection, Result};
 
 #[derive(Serialize, Deserialize)]
 struct MyConfig {
@@ -84,9 +92,50 @@ async fn play_music(search_word_list: [String; 2]) {
     };
 }
 
+/// gasバックエンド用のstruct
+#[derive(Deserialize, Debug)]
+#[allow(dead_code)]
+struct BackendResult {
+    contents: Vec<BackendSong>
+}
+
+/// BackendResultの子struct
+#[derive(Deserialize, Debug)]
+#[allow(dead_code)]
+struct BackendSong {
+    time_stamp: String,
+    mail: String,
+    song_name: String,
+    artist_name: String
+}
+
+/// SQLiteをセットアップしコネクションを返す
+#[allow(dead_code)]
+fn init_sqlite() -> Result<Connection,rusqlite::Error> {
+    let binding = ProjectDirs::from("com", "",  "tt").unwrap();
+    let project_dir = binding.config_dir();
+    let db_path = project_dir.join("tt.sqlite3");
+
+    // 存在する場合はf
+    let init = match std::fs::metadata(&db_path) {
+        Ok(_) => false,
+        Err(_) => true,
+    };
+
+    let con = Connection::open(&db_path)?;
+
+    if init {
+        // db初期化
+        let _ = con.execute("", params![]);
+    };
+
+    Ok(con)
+}
+
 #[tokio::main]
 async fn main() -> Result<(), confy::ConfyError> {
     let _cfg: MyConfig  = confy::load("tt", "tt")?;
+    let conn = init_sqlite().unwrap();
     // println!("{}", comp_end_time(NaiveTime::from_hms_opt(cfg.end_time[0], cfg.end_time[1], cfg.end_time[2]).unwrap()));
     play_music(["再生".to_string(), "ナナツカゼ".to_string()]).await;
     Ok(())
