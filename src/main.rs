@@ -78,6 +78,7 @@ async fn search_youtube(search_word_list: [String; 2]) -> String {
 
 /// 与えられた単語のリストからvideo_idを取得してmpvで再生します
 /// * `search_word_list` - 検索する単語のリスト
+#[allow(dead_code)]
 async fn play_music(search_word_list: [String; 2]) {
     let video_id = search_youtube(search_word_list).await;
 
@@ -116,20 +117,31 @@ fn init_sqlite() -> Result<Connection,rusqlite::Error> {
     let project_dir = binding.config_dir();
     let db_path = project_dir.join("tt.sqlite3");
 
-    // 存在する場合はf
-    let init = match std::fs::metadata(&db_path) {
-        Ok(_) => false,
-        Err(_) => true,
-    };
+    let conn = Connection::open(&db_path)?;
 
-    let con = Connection::open(&db_path)?;
+    let is_autocommit = conn.is_autocommit();
+    println!("Is auto-commit mode: {}", is_autocommit);
 
-    if init {
-        // db初期化
-        let _ = con.execute("", params![]);
-    };
+    // db初期化
+    conn.execute("
+        CREATE TABLE IF NOT EXISTS accounts(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT NOT NULL
+        );
+    ", params![])?;
 
-    Ok(con)
+    conn.execute("
+        CREATE TABLE IF NOT EXISTS requests(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            account_id INTEGER NOT NULL,
+            song_name TEXT NOT NULL,
+            artist_name TEXT NOT NULL,
+            played INTEGER NOT NULL
+        );
+    ", params![])?;
+
+
+    Ok(conn)
 }
 
 #[tokio::main]
@@ -137,6 +149,6 @@ async fn main() -> Result<(), confy::ConfyError> {
     let _cfg: MyConfig  = confy::load("tt", "tt")?;
     let conn = init_sqlite().unwrap();
     // println!("{}", comp_end_time(NaiveTime::from_hms_opt(cfg.end_time[0], cfg.end_time[1], cfg.end_time[2]).unwrap()));
-    play_music(["再生".to_string(), "ナナツカゼ".to_string()]).await;
+    // play_music(["再生".to_string(), "ナナツカゼ".to_string()]).await;
     Ok(())
 }
