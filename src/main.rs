@@ -83,6 +83,8 @@ async fn search_youtube(search_word_list: [String; 2]) -> String {
 /// 与えられた単語のリストからvideo_idを取得してmpvで再生します
 /// * `search_word_list` - 検索する単語のリスト
 async fn play_music(search_word_list: [String; 2]) {
+    println!("Playing {} {}", search_word_list[0], search_word_list[1]);
+
     let video_id = search_youtube(search_word_list).await;
 
     match Command::new("mpv")
@@ -99,6 +101,8 @@ async fn play_music(search_word_list: [String; 2]) {
 /// SQLiteをセットアップしコネクションを返す
 #[allow(dead_code)]
 fn init_sqlite() -> Result<Connection, rusqlite::Error> {
+    println!("Initialing SQLite");
+
     let binding = ProjectDirs::from("com", "", "tt").unwrap();
     let project_dir = binding.config_dir();
     let db_path = project_dir.join("tt.sqlite3");
@@ -106,7 +110,7 @@ fn init_sqlite() -> Result<Connection, rusqlite::Error> {
     let conn = Connection::open(&db_path)?;
 
     let is_autocommit = conn.is_autocommit();
-    println!("Is auto-commit mode: {}", is_autocommit);
+    println!("    Is auto-commit mode: {}", is_autocommit);
 
     conn.execute(
         "
@@ -145,6 +149,8 @@ struct BackendSong {
 /// * `cfg` アプリの設定
 /// * `conn` SQLiteへのコネクション
 async fn sync_backend(cfg: &MyConfig, conn: &Connection) -> Result<(), rusqlite::Error> {
+    println!("Syncing SQLite");
+
     let request_url = format!(
         "https://script.google.com/macros/s/{api_key}/exec",
         api_key = cfg.api_key
