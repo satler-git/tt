@@ -105,22 +105,15 @@ fn init_sqlite() -> Result<Connection,rusqlite::Error> {
     let is_autocommit = conn.is_autocommit();
     println!("Is auto-commit mode: {}", is_autocommit);
 
-    // db初期化
-    conn.execute("
-        CREATE TABLE IF NOT EXISTS accounts(
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            email TEXT NOT NULL
-        );
-    ", params![])?;
-
     conn.execute("
         CREATE TABLE IF NOT EXISTS requests(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            account_id INTEGER NOT NULL,
+            email TEXT NOT NULL,
             song_name TEXT NOT NULL,
             artist_name TEXT NOT NULL,
             played INTEGER NOT NULL,
-            uuid TEXT NOT NULL
+            uuid TEXT NOT NULL,
+            UNIQUE(uuid)
         );
     ", params![])?;
 
@@ -128,10 +121,48 @@ fn init_sqlite() -> Result<Connection,rusqlite::Error> {
     Ok(conn)
 }
 
+/// gasバックエンド用のstruct
+#[derive(Deserialize, Debug)]
+#[allow(dead_code)]
+struct BackendResult {
+    contents: Vec<BackendSong>
+}
+
+/// BackendResultの子struct
+#[derive(Deserialize, Debug)]
+#[allow(dead_code)]
+struct BackendSong {
+    time_stamp: String,
+    mail: String,
+    song_name: String,
+    artist_name: String,
+    uuid: String
+}
+
+/// Backendと同期するための関数
+/// * `cfg` アプリの設定
+/// * `conn` SQLiteへのコネクション
+async fn sync_backend(cfg: &MyConfig, conn: &Connection) -> Result<(),rusqlite::Error> {
+    let request_url = format!("https://script.google.com/macros/s/{api_key}/exec", api_key = cfg.api_key);
+
+    let body = reqwest::get(&request_url)
+        .await.unwrap()
+        .text()
+        .await.unwrap();
+
+    let backend_result: BackendResult = serde_json::from_str(&body).unwrap();
+
+    for song in backend_result.contents{
+        conn.execute("INSERT OR IGNORE INTO requests(email, song_name, artist_name, played, uuid) VALUES(?1, ?2, ?3, 0, ?4)", params![song.mail, song.song_name, song.artist_name, song.uuid])?;
+    }
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> Result<(), confy::ConfyError> {
-    let _cfg: MyConfig  = confy::load("tt", "tt")?;
+    let cfg: MyConfig  = confy::load("tt", "tt")?;
     let conn = init_sqlite().unwrap();
+    sync_backend(&cfg, &conn).await.unwrap();
     // println!("{}", comp_end_time(NaiveTime::from_hms_opt(cfg.end_time[0], cfg.end_time[1], cfg.end_time[2]).unwrap()));
     // play_music(["再生".to_string(), "ナナツカゼ".to_string()]).await;
     Ok(())
