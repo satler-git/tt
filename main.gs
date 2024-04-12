@@ -1,4 +1,5 @@
 // Tent API Backend
+// Trigger: onFormSubmit -> onSubmit(e)
 
 function removeNullsFromArray(arr) {
   if (!Array.isArray(arr)) {
@@ -8,15 +9,15 @@ function removeNullsFromArray(arr) {
   return arr.filter(element => element !== null && element !== undefined);
 }
 
-function getJsonMusicQueue(acquired = 0) {
+function getJsonMusicQueue() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheets()[0];
   const data = sheet.getRange(1, 1, sheet.getLastRow(), sheet.getLastColumn()).getValues();
 
   const objectArray = [];
-  for (let i = 1 + acquired; i < data.length; i++) {
+  for (let i = 1; i < data.length; i++) {
     const item = {};
-    const headerlist = ["time_stamp", "mail", "song_name", "artist_name"]
+    const headerlist = ["time_stamp", "mail", "song_name", "artist_name", "uuid"]
 
     for (let j = 0; j < data[0].length; j++) {
       item[headerlist[j]] = data[i][j];
@@ -33,7 +34,12 @@ function getJsonMusicQueue(acquired = 0) {
 }
 
 const doGet = (e) => {
-  const acquired = parseInt(e.parameter.acquired) || 0;
+  return ContentService.createTextOutput(getJsonMusicQueue());
+}
 
-  return ContentService.createTextOutput(getJsonMusicQueue(acquired));
+function onSubmit(e) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheets()[0];
+
+  sheet.getRange(e.range.getRow(), 5).setValue(Utilities.getUuid());
 }

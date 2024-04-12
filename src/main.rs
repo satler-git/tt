@@ -93,23 +93,6 @@ async fn play_music(search_word_list: [String; 2]) {
     };
 }
 
-/// gasバックエンド用のstruct
-#[derive(Deserialize, Debug)]
-#[allow(dead_code)]
-struct BackendResult {
-    contents: Vec<BackendSong>
-}
-
-/// BackendResultの子struct
-#[derive(Deserialize, Debug)]
-#[allow(dead_code)]
-struct BackendSong {
-    time_stamp: String,
-    mail: String,
-    song_name: String,
-    artist_name: String
-}
-
 /// SQLiteをセットアップしコネクションを返す
 #[allow(dead_code)]
 fn init_sqlite() -> Result<Connection,rusqlite::Error> {
@@ -136,7 +119,8 @@ fn init_sqlite() -> Result<Connection,rusqlite::Error> {
             account_id INTEGER NOT NULL,
             song_name TEXT NOT NULL,
             artist_name TEXT NOT NULL,
-            played INTEGER NOT NULL
+            played INTEGER NOT NULL,
+            uuid TEXT NOT NULL
         );
     ", params![])?;
 
