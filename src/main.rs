@@ -5,11 +5,11 @@
 //! gasのデプロイID
 
 use chrono::{DateTime, FixedOffset, NaiveTime, Utc};
+use directories::ProjectDirs;
+use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
+use rusqlite::{params, Connection, Result};
 use serde_derive::{Deserialize, Serialize};
 use std::process::{Command, Stdio};
-use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
-use directories::ProjectDirs;
-use rusqlite::{params, Connection, Result};
 
 #[derive(Serialize, Deserialize)]
 struct MyConfig {
@@ -19,7 +19,8 @@ struct MyConfig {
 
 /// `MyConfig` implements `Default`
 impl ::std::default::Default for MyConfig {
-    fn default() -> Self { Self {
+    fn default() -> Self {
+        Self {
             api_key: "".into(),
             end_time: [13, 5, 0],
         }
@@ -28,11 +29,11 @@ impl ::std::default::Default for MyConfig {
 
 /// 与えられたNaiveTimeと現在の時刻を比較します
 /// * `end_time` - 比較対象の時間
-#[allow(dead_code)]
 fn comp_end_time(end_time: NaiveTime) -> bool {
     // let end_time: NaiveTime = NaiveTime::from_hms_opt(13, 5, 0).unwrap();
     let now_utc: DateTime<Utc> = Utc::now();
-    let now: DateTime<FixedOffset> = now_utc.with_timezone(&FixedOffset::east_opt(9*3600).unwrap());
+    let now: DateTime<FixedOffset> =
+        now_utc.with_timezone(&FixedOffset::east_opt(9 * 3600).unwrap());
     let now_naive: NaiveTime = now.time();
     now_naive > end_time
 }
@@ -40,18 +41,18 @@ fn comp_end_time(end_time: NaiveTime) -> bool {
 /// 検索結果用の構造体
 #[derive(Deserialize, Debug)]
 struct YoutubeSearchResult {
-    items: Vec<YoutubeSearchItem>
+    items: Vec<YoutubeSearchItem>,
 }
 
 #[derive(Deserialize, Debug)]
 struct YoutubeSearchItem {
-    id: YoutubeSearchId
+    id: YoutubeSearchId,
 }
 
 #[allow(non_snake_case)]
 #[derive(Deserialize, Debug)]
 struct YoutubeSearchId {
-    videoId: String
+    videoId: String,
 }
 
 /// 与えられた単語のリストからvideo_idを取得します
@@ -73,12 +74,14 @@ async fn search_youtube(search_word_list: [String; 2]) -> String {
         .unwrap();
 
     let result: YoutubeSearchResult = serde_json::from_str(&body).unwrap();
-    format!("https://www.youtube.com/watch?v={video_id}", video_id = result.items[0].id.videoId.clone())
+    format!(
+        "https://www.youtube.com/watch?v={video_id}",
+        video_id = result.items[0].id.videoId.clone()
+    )
 }
 
 /// 与えられた単語のリストからvideo_idを取得してmpvで再生します
 /// * `search_word_list` - 検索する単語のリスト
-#[allow(dead_code)]
 async fn play_music(search_word_list: [String; 2]) {
     let video_id = search_youtube(search_word_list).await;
 
@@ -95,8 +98,8 @@ async fn play_music(search_word_list: [String; 2]) {
 
 /// SQLiteをセットアップしコネクションを返す
 #[allow(dead_code)]
-fn init_sqlite() -> Result<Connection,rusqlite::Error> {
-    let binding = ProjectDirs::from("com", "",  "tt").unwrap();
+fn init_sqlite() -> Result<Connection, rusqlite::Error> {
+    let binding = ProjectDirs::from("com", "", "tt").unwrap();
     let project_dir = binding.config_dir();
     let db_path = project_dir.join("tt.sqlite3");
 
@@ -105,7 +108,8 @@ fn init_sqlite() -> Result<Connection,rusqlite::Error> {
     let is_autocommit = conn.is_autocommit();
     println!("Is auto-commit mode: {}", is_autocommit);
 
-    conn.execute("
+    conn.execute(
+        "
         CREATE TABLE IF NOT EXISTS requests(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             email TEXT NOT NULL,
@@ -115,44 +119,47 @@ fn init_sqlite() -> Result<Connection,rusqlite::Error> {
             uuid TEXT NOT NULL,
             UNIQUE(uuid)
         );
-    ", params![])?;
-
+    ",
+        params![],
+    )?;
 
     Ok(conn)
 }
 
 /// gasバックエンド用のstruct
 #[derive(Deserialize, Debug)]
-#[allow(dead_code)]
 struct BackendResult {
-    contents: Vec<BackendSong>
+    contents: Vec<BackendSong>,
 }
 
 /// BackendResultの子struct
 #[derive(Deserialize, Debug)]
-#[allow(dead_code)]
 struct BackendSong {
-    time_stamp: String,
     mail: String,
     song_name: String,
     artist_name: String,
-    uuid: String
+    uuid: String,
 }
 
 /// Backendと同期するための関数
 /// * `cfg` アプリの設定
 /// * `conn` SQLiteへのコネクション
-async fn sync_backend(cfg: &MyConfig, conn: &Connection) -> Result<(),rusqlite::Error> {
-    let request_url = format!("https://script.google.com/macros/s/{api_key}/exec", api_key = cfg.api_key);
+async fn sync_backend(cfg: &MyConfig, conn: &Connection) -> Result<(), rusqlite::Error> {
+    let request_url = format!(
+        "https://script.google.com/macros/s/{api_key}/exec",
+        api_key = cfg.api_key
+    );
 
     let body = reqwest::get(&request_url)
-        .await.unwrap()
+        .await
+        .unwrap()
         .text()
-        .await.unwrap();
+        .await
+        .unwrap();
 
     let backend_result: BackendResult = serde_json::from_str(&body).unwrap();
 
-    for song in backend_result.contents{
+    for song in backend_result.contents {
         conn.execute("INSERT OR IGNORE INTO requests(email, song_name, artist_name, played, uuid) VALUES(?1, ?2, ?3, 0, ?4)", params![song.mail, song.song_name, song.artist_name, song.uuid])?;
     }
     Ok(())
@@ -160,7 +167,7 @@ async fn sync_backend(cfg: &MyConfig, conn: &Connection) -> Result<(),rusqlite::
 
 #[tokio::main]
 async fn main() -> Result<(), confy::ConfyError> {
-    let cfg: MyConfig  = confy::load("tt", "tt")?;
+    let cfg: MyConfig = confy::load("tt", "tt")?;
     let conn = init_sqlite().unwrap();
     sync_backend(&cfg, &conn).await.unwrap();
     // println!("{}", comp_end_time(NaiveTime::from_hms_opt(cfg.end_time[0], cfg.end_time[1], cfg.end_time[2]).unwrap()));
