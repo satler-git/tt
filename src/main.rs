@@ -7,6 +7,7 @@
 use chrono::{DateTime, FixedOffset, NaiveTime, Utc};
 use directories::ProjectDirs;
 use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
+use rand::seq::SliceRandom;
 use rusqlite::{params, Connection, Result};
 use serde_derive::{Deserialize, Serialize};
 use std::process::{Command, Stdio};
@@ -35,7 +36,7 @@ fn comp_end_time(end_time: NaiveTime) -> bool {
     let now: DateTime<FixedOffset> =
         now_utc.with_timezone(&FixedOffset::east_opt(9 * 3600).unwrap());
     let now_naive: NaiveTime = now.time();
-    now_naive > end_time
+    now_naive < end_time
 }
 
 /// 検索結果用の構造体
@@ -58,7 +59,7 @@ struct YoutubeSearchId {
 /// 与えられた単語のリストからvideo_idを取得します
 /// * `search_word_list` - 検索する単語のリスト
 /// Youtubeのリンクとして返します
-async fn search_youtube(search_word_list: [String; 2]) -> String {
+async fn search_youtube(search_word_list: [&String; 2]) -> String {
     let [name, artist] = search_word_list;
     let request_url = format!(
         "https://yt.lemnoslife.com/search?part=id&q={name}+{artist}&type=video",
@@ -80,9 +81,17 @@ async fn search_youtube(search_word_list: [String; 2]) -> String {
     )
 }
 
+/// SQLiteから取得し、再生するためのstruct
+#[derive(Deserialize)]
+struct Request {
+    id: i32,
+    song_name: String,
+    artist_name: String,
+}
+
 /// 与えられた単語のリストからvideo_idを取得してmpvで再生します
 /// * `search_word_list` - 検索する単語のリスト
-async fn play_music(search_word_list: [String; 2]) {
+async fn play_music(search_word_list: [&String; 2]) {
     println!("Playing {} {}", search_word_list[0], search_word_list[1]);
 
     let video_id = search_youtube(search_word_list).await;
@@ -98,8 +107,22 @@ async fn play_music(search_word_list: [String; 2]) {
     };
 }
 
+impl Request {
+    /// `play_music()`で再生します
+    async fn play(&self) {
+        play_music([&self.song_name, &self.artist_name]).await;
+    }
+
+    fn set_as_played(&self, conn: &Connection) {
+        conn.execute(
+            "UPDATE requests SET played = 1 WHERE id = ?1",
+            params![self.id],
+        )
+        .unwrap();
+    }
+}
+
 /// SQLiteをセットアップしコネクションを返す
-#[allow(dead_code)]
 fn init_sqlite() -> Result<Connection, rusqlite::Error> {
     println!("Initialing SQLite");
 
@@ -121,6 +144,7 @@ fn init_sqlite() -> Result<Connection, rusqlite::Error> {
             artist_name TEXT NOT NULL,
             played INTEGER NOT NULL,
             uuid TEXT NOT NULL,
+            arrange INTEGER NOT NULL,
             UNIQUE(uuid)
         );
     ",
@@ -165,10 +189,61 @@ async fn sync_backend(cfg: &MyConfig, conn: &Connection) -> Result<(), rusqlite:
 
     let backend_result: BackendResult = serde_json::from_str(&body).unwrap();
 
+    let mut stmt = conn
+        .prepare("select id from requests where email = ?1")
+        .unwrap();
+
     for song in backend_result.contents {
-        conn.execute("INSERT OR IGNORE INTO requests(email, song_name, artist_name, played, uuid) VALUES(?1, ?2, ?3, 0, ?4)", params![song.mail, song.song_name, song.artist_name, song.uuid])?;
+        let order = stmt
+            .query([&song.mail])
+            .unwrap()
+            .mapped(|_row| Ok(0))
+            .count()
+            + 1;
+        conn.execute("INSERT OR IGNORE INTO requests(email, song_name, artist_name, played, uuid, arrange) VALUES(?1, ?2, ?3, 0, ?4, ?5)", params![&song.mail, &song.song_name, &song.artist_name, &song.uuid, &order])?;
     }
     Ok(())
+}
+
+/// `comp_end_time()`のラップ
+/// * `cfg` Myconfig
+fn comp_time(cfg: &MyConfig) -> bool {
+    comp_end_time(
+        NaiveTime::from_hms_opt(cfg.end_time[0], cfg.end_time[1], cfg.end_time[2]).unwrap(),
+    )
+}
+
+/// SQLiteから次の流すべきリクエストを判断し`play_song()`で再生
+/// * `conn` SQLiteのコネクション
+async fn play_next(conn: &Connection) {
+    // playedがfalseかつ、arrangeが最小(!unique)
+    let mut stmt = conn
+        .prepare("select id, song_name, artist_name from requests where played = 0 and arrange = (select MIN(arrange) from requests where played = 0)")
+        .unwrap();
+    let request_iter = stmt
+        .query_map([], |row| {
+            Ok(Request {
+                id: row.get(0).unwrap(),
+                song_name: row.get(1).unwrap(),
+                artist_name: row.get(2).unwrap(),
+            })
+        })
+        .unwrap();
+
+    let mut requests = Vec::new();
+
+    for request in request_iter {
+        requests.push(request.unwrap());
+    }
+
+    if requests.len() == 0 {
+        panic!("Couldn't find next to play");
+    }
+
+    let next = requests.choose(&mut rand::thread_rng()).unwrap();
+
+    next.play().await;
+    next.set_as_played(&conn);
 }
 
 #[tokio::main]
@@ -176,7 +251,11 @@ async fn main() -> Result<(), confy::ConfyError> {
     let cfg: MyConfig = confy::load("tt", "tt")?;
     let conn = init_sqlite().unwrap();
     sync_backend(&cfg, &conn).await.unwrap();
-    // println!("{}", comp_end_time(NaiveTime::from_hms_opt(cfg.end_time[0], cfg.end_time[1], cfg.end_time[2]).unwrap()));
-    // play_music(["再生".to_string(), "ナナツカゼ".to_string()]).await;
+
+    while comp_time(&cfg) {
+        play_next(&conn).await;
+        println!("Comp to time: {}", comp_time(&cfg));
+    }
+
     Ok(())
 }
