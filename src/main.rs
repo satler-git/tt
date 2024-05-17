@@ -4,13 +4,28 @@
 //! * `api_key`
 //! gasのデプロイID
 
-use chrono::{DateTime, FixedOffset, NaiveTime, Utc};
+use chrono::{DateTime, Duration,FixedOffset, NaiveTime, Utc};
+use clap::Parser;
 use directories::ProjectDirs;
 use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use rand::seq::SliceRandom;
 use rusqlite::{params, Connection, Result};
 use serde_derive::{Deserialize, Serialize};
 use std::process::{Command, Stdio};
+
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
+struct Args {
+    /// duration to play
+    #[arg(short, long, help = "Specify the time to play in the form of \"1h30m5s\"")]
+    duration: String,
+
+    #[arg(short, long, help = "\"%H:%M\", 24h")]
+    end_time: String,
+
+    #[arg(last = true, help = "Options for mpv")]
+    mpv_args: Vec<String>,
+}
 
 #[derive(Serialize, Deserialize)]
 struct MyConfig {
@@ -28,6 +43,19 @@ impl ::std::default::Default for MyConfig {
     }
 }
 
+/// `1h30m5s`のような時間をパースする関数
+fn parse_duration_time(time_str: &str) -> Duration {
+    let mut parts = time_str.split(|c| c == 'h' || c == 'm' || c == 's');
+    let hours = parts.next().unwrap_or("0").parse::<u32>().unwrap();
+    let minutes = parts.next().unwrap_or("0").parse::<u32>().unwrap();
+    let seconds = parts.next().unwrap_or("0").parse::<u32>().unwrap();
+    Duration::seconds(seconds + minutes * 60 + hours * 3600)
+}
+
+fn parse_end_time_from_str(time_str: &str) -> NaiveTime {
+    NaiveTime::parse_from_str(time_str, "%H:%M")
+}
+
 /// 与えられたNaiveTimeと現在の時刻を比較します
 /// * `end_time` - 比較対象の時間
 fn comp_end_time(end_time: NaiveTime) -> bool {
@@ -37,6 +65,14 @@ fn comp_end_time(end_time: NaiveTime) -> bool {
         now_utc.with_timezone(&FixedOffset::east_opt(9 * 3600).unwrap());
     let now_naive: NaiveTime = now.time();
     now_naive < end_time
+}
+
+/// `comp_end_time()`のラップ
+/// * `cfg` Myconfig
+fn comp_time(cfg: &MyConfig) -> bool {
+    comp_end_time(
+        NaiveTime::from_hms_opt(cfg.end_time[0], cfg.end_time[1], cfg.end_time[2]).unwrap(),
+    )
 }
 
 /// 検索結果用の構造体
@@ -205,14 +241,6 @@ async fn sync_backend(cfg: &MyConfig, conn: &Connection) -> Result<(), rusqlite:
     Ok(())
 }
 
-/// `comp_end_time()`のラップ
-/// * `cfg` Myconfig
-fn comp_time(cfg: &MyConfig) -> bool {
-    comp_end_time(
-        NaiveTime::from_hms_opt(cfg.end_time[0], cfg.end_time[1], cfg.end_time[2]).unwrap(),
-    )
-}
-
 /// SQLiteから次の流すべきリクエストを判断し`play_song()`で再生
 /// * `conn` SQLiteのコネクション
 async fn play_next(conn: &Connection) {
@@ -249,6 +277,7 @@ async fn play_next(conn: &Connection) {
 #[tokio::main]
 async fn main() -> Result<(), confy::ConfyError> {
     let cfg: MyConfig = confy::load("tt", "tt")?;
+    let args = Args::parse();
     let conn = init_sqlite().unwrap();
     sync_backend(&cfg, &conn).await.unwrap();
 
