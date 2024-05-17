@@ -61,13 +61,13 @@ fn parse_time_options(args: Args) -> Result<[u32; 3]> {
         Some(i) => {
             Utc::now().time() + parse_duration_time(&i)
         },
-        _ => {return Err(()},
+        _ => {return Err(())},
     };
     end_time = match args.end_time {
         Some(i) => {
             parse_end_time_from_str(&i)
         }
-        _ => {return Err(()}
+        _ => {return Err(())}
     };
     Ok([end_time.hour(), end_time.minute(), end_time.second()])
 }
