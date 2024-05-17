@@ -17,7 +17,7 @@ use std::process::{Command, Stdio};
 #[command(version, about, long_about = None)]
 struct Args {
     /// duration to play
-    #[arg(short, long, confricts_with = "end_time",help = "Specify the time to play in the form of \"1h30m5s\"")]
+    #[arg(short, long, conflicts_with = "end_time",help = "Specify the time to play in the form of \"1h30m5s\"")]
     duration: Option<String>,
 
     #[arg(short, long, conflicts_with = "duration",help = "\"%H:%M\", 24h")]
@@ -49,11 +49,11 @@ fn parse_duration_time(time_str: &str) -> Duration {
     let hours = parts.next().unwrap_or("0").parse::<u32>().unwrap();
     let minutes = parts.next().unwrap_or("0").parse::<u32>().unwrap();
     let seconds = parts.next().unwrap_or("0").parse::<u32>().unwrap();
-    Duration::seconds(seconds + minutes * 60 + hours * 3600)
+    Duration::seconds(seconds + minutes * 60u32 + hours * 3600u32)
 }
 
 fn parse_end_time_from_str(time_str: &str) -> NaiveTime {
-    NaiveTime::parse_from_str(time_str, "%H:%M")
+    NaiveTime::parse_from_str(time_str, "%H:%M").expect("Can't parse end time from str")
 }
 
 fn parse_time_options(args: Args) -> Result<[u32; 3]> {
@@ -61,15 +61,15 @@ fn parse_time_options(args: Args) -> Result<[u32; 3]> {
         Some(i) => {
             Utc::now().time() + parse_duration_time(&i)
         },
-        _ => {},
+        _ => {Err()},
     };
     end_time = match args.end_time {
         Some(i) => {
             parse_end_time_from_str(&i)
         }
-        _ => {}
+        _ => {Err()}
     }
-    [end_time.hour(), end_time.minute(), end_time.second()]
+    Ok([end_time.hour(), end_time.minute(), end_time.second()])
 }
 
 /// 与えられたNaiveTimeと現在の時刻を比較します
@@ -301,9 +301,9 @@ async fn main() -> Result<(), confy::ConfyError> {
     sync_backend(&cfg, &conn).await.unwrap();
 
     let mpv_args = match args.mpv_args {
-        Some(i) => i
+        Some(i) => i,
         _ => Vec::new()
-    }
+    };
 
     while comp_time(&cfg) {
         play_next(&conn, &mpv_args).await;
