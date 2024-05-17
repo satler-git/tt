@@ -4,7 +4,7 @@
 //! * `api_key`
 //! gasのデプロイID
 
-use chrono::{DateTime, Duration,FixedOffset, NaiveTime, Utc};
+use chrono::{DateTime, Duration,FixedOffset, NaiveTime, Utc, Timelike};
 use clap::Parser;
 use directories::ProjectDirs;
 use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
@@ -56,7 +56,7 @@ fn parse_end_time_from_str(time_str: &str) -> NaiveTime {
     NaiveTime::parse_from_str(time_str, "%H:%M").expect("Can't parse end time from str")
 }
 
-fn parse_time_options(args: Args) -> Result<[u32; 3]> {
+fn parse_time_options(args: &Args) -> Result<[u32; 3]> {
     let mut end_time = match args.duration {
         Some(i) => {
             Utc::now().time() + parse_duration_time(&i)
