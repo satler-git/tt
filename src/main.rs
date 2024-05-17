@@ -17,14 +17,14 @@ use std::process::{Command, Stdio};
 #[command(version, about, long_about = None)]
 struct Args {
     /// duration to play
-    #[arg(short, long, help = "Specify the time to play in the form of \"1h30m5s\"")]
-    duration: String,
+    #[arg(short, long, confricts_with = "end_time",help = "Specify the time to play in the form of \"1h30m5s\"")]
+    duration: Option<String>,
 
-    #[arg(short, long, help = "\"%H:%M\", 24h")]
-    end_time: String,
+    #[arg(short, long, conflicts_with = "duration",help = "\"%H:%M\", 24h")]
+    end_time: Option<String>,
 
     #[arg(last = true, help = "Options for mpv")]
-    mpv_args: Vec<String>,
+    mpv_args: Option<Vec<String>>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -54,6 +54,22 @@ fn parse_duration_time(time_str: &str) -> Duration {
 
 fn parse_end_time_from_str(time_str: &str) -> NaiveTime {
     NaiveTime::parse_from_str(time_str, "%H:%M")
+}
+
+fn parse_time_options(args: Args) -> Result<[u32; 3]> {
+    let mut end_time = match args.duration {
+        Some(i) => {
+            Utc::now().time() + parse_duration_time(&i)
+        },
+        _ => {},
+    };
+    end_time = match args.end_time {
+        Some(i) => {
+            parse_end_time_from_str(&i)
+        }
+        _ => {}
+    }
+    [end_time.hour(), end_time.minute(), end_time.second()]
 }
 
 /// 与えられたNaiveTimeと現在の時刻を比較します
@@ -127,13 +143,13 @@ struct Request {
 
 /// 与えられた単語のリストからvideo_idを取得してmpvで再生します
 /// * `search_word_list` - 検索する単語のリスト
-async fn play_music(search_word_list: [&String; 2]) {
+async fn play_music(search_word_list: [&String; 2], mpv_args: Vec<String>) {
     println!("Playing {} {}", search_word_list[0], search_word_list[1]);
 
     let video_id = search_youtube(search_word_list).await;
 
     match Command::new("mpv")
-        .args(["-fs", /* "--volume=50", */ &video_id])
+        .args( mpv_args + Vec::from(["-fs", /* "--volume=50", */ &video_id]))
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .output()
@@ -145,8 +161,8 @@ async fn play_music(search_word_list: [&String; 2]) {
 
 impl Request {
     /// `play_music()`で再生します
-    async fn play(&self) {
-        play_music([&self.song_name, &self.artist_name]).await;
+    async fn play(&self, mpv_args: Vec<String>) {
+        play_music([&self.song_name, &self.artist_name], mpv_args).await;
     }
 
     fn set_as_played(&self, conn: &Connection) {
@@ -243,7 +259,7 @@ async fn sync_backend(cfg: &MyConfig, conn: &Connection) -> Result<(), rusqlite:
 
 /// SQLiteから次の流すべきリクエストを判断し`play_song()`で再生
 /// * `conn` SQLiteのコネクション
-async fn play_next(conn: &Connection) {
+async fn play_next(conn: &Connection, mpv_args: Vec<String>) {
     // playedがfalseかつ、arrangeが最小(!unique)
     let mut stmt = conn
         .prepare("select id, song_name, artist_name from requests where played = 0 and arrange = (select MIN(arrange) from requests where played = 0)")
@@ -270,19 +286,27 @@ async fn play_next(conn: &Connection) {
 
     let next = requests.choose(&mut rand::thread_rng()).unwrap();
 
-    next.play().await;
+    next.play(mpv_args).await;
     next.set_as_played(&conn);
 }
 
 #[tokio::main]
 async fn main() -> Result<(), confy::ConfyError> {
-    let cfg: MyConfig = confy::load("tt", "tt")?;
+    let mut cfg: MyConfig = confy::load("tt", "tt")?;
     let args = Args::parse();
+    if let Ok(i)  = parse_time_options(&args) { 
+        cfg.end_time = i;
+    }
     let conn = init_sqlite().unwrap();
     sync_backend(&cfg, &conn).await.unwrap();
 
+    let mpv_args = match args.mpv_args {
+        Some(i) => i
+        _ => Vec::new()
+    }
+
     while comp_time(&cfg) {
-        play_next(&conn).await;
+        play_next(&conn, &mpv_args).await;
         println!("Comp to time: {}", comp_time(&cfg));
     }
 
