@@ -49,7 +49,7 @@ fn parse_duration_time(time_str: &str) -> Duration {
     let hours = parts.next().unwrap_or("0").parse::<u32>().unwrap();
     let minutes = parts.next().unwrap_or("0").parse::<u32>().unwrap();
     let seconds = parts.next().unwrap_or("0").parse::<u32>().unwrap();
-    Duration::seconds(seconds + minutes * 60u32 + hours * 3600u32)
+    Duration::seconds((seconds + minutes * 60u32 + hours * 3600u32) as i64)
 }
 
 fn parse_end_time_from_str(time_str: &str) -> NaiveTime {
@@ -61,14 +61,14 @@ fn parse_time_options(args: Args) -> Result<[u32; 3]> {
         Some(i) => {
             Utc::now().time() + parse_duration_time(&i)
         },
-        _ => {Err()},
+        _ => {return Err(()},
     };
     end_time = match args.end_time {
         Some(i) => {
             parse_end_time_from_str(&i)
         }
-        _ => {Err()}
-    }
+        _ => {return Err(()}
+    };
     Ok([end_time.hour(), end_time.minute(), end_time.second()])
 }
 
@@ -143,7 +143,7 @@ struct Request {
 
 /// 与えられた単語のリストからvideo_idを取得してmpvで再生します
 /// * `search_word_list` - 検索する単語のリスト
-async fn play_music(search_word_list: [&String; 2], mpv_args: Vec<String>) {
+async fn play_music(search_word_list: [&String; 2], mpv_args: &Vec<String>) {
     println!("Playing {} {}", search_word_list[0], search_word_list[1]);
 
     let video_id = search_youtube(search_word_list).await;
@@ -161,7 +161,7 @@ async fn play_music(search_word_list: [&String; 2], mpv_args: Vec<String>) {
 
 impl Request {
     /// `play_music()`で再生します
-    async fn play(&self, mpv_args: Vec<String>) {
+    async fn play(&self, mpv_args: &Vec<String>) {
         play_music([&self.song_name, &self.artist_name], mpv_args).await;
     }
 
@@ -259,7 +259,7 @@ async fn sync_backend(cfg: &MyConfig, conn: &Connection) -> Result<(), rusqlite:
 
 /// SQLiteから次の流すべきリクエストを判断し`play_song()`で再生
 /// * `conn` SQLiteのコネクション
-async fn play_next(conn: &Connection, mpv_args: Vec<String>) {
+async fn play_next(conn: &Connection, mpv_args: &Vec<String>) {
     // playedがfalseかつ、arrangeが最小(!unique)
     let mut stmt = conn
         .prepare("select id, song_name, artist_name from requests where played = 0 and arrange = (select MIN(arrange) from requests where played = 0)")
