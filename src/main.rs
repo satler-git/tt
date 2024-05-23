@@ -76,7 +76,7 @@ async fn search_youtube(search_word_list: [&String; 2]) -> String {
 
     let result: YoutubeSearchResult = serde_json::from_str(&body).unwrap();
     if result.items.len() == 0 {
-        ""
+        "".to_string()
     }
     format!(
         "https://www.youtube.com/watch?v={video_id}",
