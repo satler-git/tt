@@ -36,6 +36,7 @@ jobs:
     - uses: Swatinem/rust-cache@v2
       with:
         prefix-key: "v0-rust-${{ matrix.target }}"
+    - run: cargo tree
     - name: Build
       run: cargo build --verbose --release
     - name: Upload artifacts(Windows)
