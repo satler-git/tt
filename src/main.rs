@@ -48,6 +48,7 @@ struct YoutubeSearchResult {
 #[derive(Deserialize, Debug)]
 struct YoutubeSearchItem {
     id: YoutubeSearchId,
+    snippet: YoutubeSearchSnippet,
 }
 
 #[allow(non_snake_case)]
@@ -56,13 +57,18 @@ struct YoutubeSearchId {
     videoId: String,
 }
 
+#[derive(Deserialize, Debug)]
+struct YoutubeSearchSnippet {
+    duration: i64,
+}
+
 /// 与えられた単語のリストからvideo_idを取得します
 /// * `search_word_list` - 検索する単語のリスト
 /// Youtubeのリンクとして返します
 async fn search_youtube(search_word_list: [&String; 2]) -> String {
     let [name, artist] = search_word_list;
     let request_url = format!(
-        "https://yt.lemnoslife.com/search?part=id&q={name}+{artist}&type=video",
+        "https://yt.lemnoslife.com/search?part=id,snippet&q={name}+{artist}&type=video",
         name = utf8_percent_encode(&name, NON_ALPHANUMERIC).to_string(),
         artist = utf8_percent_encode(&artist, NON_ALPHANUMERIC).to_string()
     );
@@ -75,13 +81,19 @@ async fn search_youtube(search_word_list: [&String; 2]) -> String {
         .unwrap();
 
     let result: YoutubeSearchResult = serde_json::from_str(&body).unwrap();
-    if result.items.len() == 0 {
-        return "".to_string();
+    for i in &result.items {
+        if i.snippet.duration >= 900 { // 60s * 15m
+            return format!(
+                "https://www.youtube.com/watch?v={video_id}",
+                video_id = result.items[0].id.videoId.clone()
+            );
+        } else {
+            println!("The video is over 15 minutes long.")
+        }
     }
-    format!(
-        "https://www.youtube.com/watch?v={video_id}",
-        video_id = result.items[0].id.videoId.clone()
-    )
+    // TODO: 検索できなかった場合のエラー処理。理想的にはそのレコード削除?
+    println!("Couldn't find video with search.");
+    return "".to_string();
 }
 
 /// SQLiteから取得し、再生するためのstruct
@@ -105,6 +117,7 @@ async fn play_music(search_word_list: [&String; 2]) {
         .stdout(Stdio::piped())
         .output()
     {
+        // TODO:
         Err(why) => panic!("Error on executing mpv: {}", why),
         Ok(process) => process,
     };
