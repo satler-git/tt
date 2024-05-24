@@ -259,3 +259,25 @@ async fn main() -> Result<(), confy::ConfyError> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::parse_end_time;
+
+    /// 正常な入力をパース出来るか
+    #[test]
+    fn check_parse_end_time() {
+        assert_eq!([12, 30, 0], parse_end_time("12:30".into()));
+        assert_eq!([6, 6, 0], parse_end_time("6:6".into()));
+        assert_eq!([13, 5, 0], parse_end_time("13:05".into()));
+    }
+
+    /// 異常な入力を検出してパニック
+    #[should_panic]
+    fn check_parse_end_time_panic() {
+        parse_end_time("100:0".into());
+        parse_end_time("0:0:0".into());
+        parse_end_time("-1:0".into());
+        parse_end_time("0:100".into());
+    }
+}
