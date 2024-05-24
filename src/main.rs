@@ -11,6 +11,7 @@ use rand::seq::SliceRandom;
 use rusqlite::{params, Connection, Result};
 use serde_derive::{Deserialize, Serialize};
 use std::process::{Command, Stdio};
+use clap::Parser;
 
 #[derive(Serialize, Deserialize)]
 struct MyConfig {
@@ -246,9 +247,27 @@ async fn play_next(conn: &Connection) {
     next.set_as_played(&conn);
 }
 
+/// ClI引数用のストラクト
+#[derive(Parser, Debug)]
+#[command(version)]
+#[command(about = "A CLI tool for playing music automatically.", long_about = None)]
+struct Args {
+    // "12:30"のように24hで指定する
+    #[arg(short, long, help = "Specify the end time in 24-hour notation, separated by \":\", for example, \"12:30\" minutes. \nCan't be specified at the same time as the duration.")]
+    #[arg(conflicts_with = "duration")]
+    end_time: Option<String>,
+    // "1h2m3s"的な感じで指定する
+    #[arg(short, long, help = "Specify by integer, separated by h, m, and s, as in \"1h2m3s\". Each can be omitted.")]
+    duration: Option<String>,
+    #[arg(last = true, help = "Arguments passed directly to mpv.")]
+    mpv_arsg: Option<Vec<String>>
+}
+
 #[tokio::main]
 async fn main() -> Result<(), confy::ConfyError> {
     let cfg: MyConfig = confy::load("tt", "tt")?;
+    // TODO:
+    let args = Args::parse();
     let conn = init_sqlite().unwrap();
     sync_backend(&cfg, &conn).await.unwrap();
 
@@ -262,7 +281,7 @@ async fn main() -> Result<(), confy::ConfyError> {
 
 #[cfg(test)]
 mod tests {
-    use crate::parse_end_time;
+    use super::*;
 
     /// 正常な入力をパース出来るか
     #[test]
