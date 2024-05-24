@@ -92,7 +92,7 @@ async fn search_youtube(search_word_list: [&String; 2]) -> String {
         }
     }
     // TODO: 検索できなかった場合のエラー処理。理想的にはそのレコード削除?
-    println!("Couldn't find video with search.")
+    println!("Couldn't find video with search.");
     return "".to_string();
 }
 
