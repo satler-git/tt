@@ -81,7 +81,7 @@ async fn search_youtube(search_word_list: [&String; 2]) -> String {
         .unwrap();
 
     let result: YoutubeSearchResult = serde_json::from_str(&body).unwrap();
-    for i in result.items {
+    for i in &result.items {
         if i.snippet.duration >= 900 { // 60s * 15m
             return format!(
                 "https://www.youtube.com/watch?v={video_id}",
