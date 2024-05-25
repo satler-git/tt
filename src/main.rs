@@ -5,13 +5,13 @@
 //! gasのデプロイID
 
 use chrono::{DateTime, FixedOffset, NaiveTime, Utc};
+use clap::Parser;
 use directories::ProjectDirs;
 use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use rand::seq::SliceRandom;
 use rusqlite::{params, Connection, Result};
 use serde_derive::{Deserialize, Serialize};
 use std::process::{Command, Stdio};
-use clap::Parser;
 
 #[derive(Serialize, Deserialize)]
 struct MyConfig {
@@ -271,6 +271,24 @@ struct Args {
     mpv_arsg: Option<Vec<String>>,
 }
 
+/// `12:30`の様に与えられたのを`[12, 30, 0]`の様にパースする
+/// `26:40`の様に与えられた場合はパニック
+fn parse_end_time(end_time: String) -> [u32; 3] {
+    let str_words: Vec<&str> = end_time.split(":").collect();
+
+    let u32_words = str_words
+        .iter()
+        .map(|s| s.parse::<u32>().unwrap())
+        .collect::<Vec<u32>>();
+
+    // 正しい数じゃないか確認
+    if (u32_words[0] >= 24) | (u32_words[1] >= 60) | (str_words.len() != 2) {
+        panic!("The end_time option was not valid.");
+    }
+
+    [u32_words[0], u32_words[1], 0]
+}
+
 #[tokio::main]
 async fn main() -> Result<(), confy::ConfyError> {
     let cfg: MyConfig = confy::load("tt", "tt")?;
@@ -299,12 +317,46 @@ mod tests {
         assert_eq!([13, 5, 0], parse_end_time("13:05".into()));
     }
 
-    /// 異常な入力を検出してパニック
+    #[test]
     #[should_panic]
-    fn check_parse_end_time_panic() {
+    fn check_parse_end_time_invaild_h() {
         parse_end_time("100:0".into());
-        parse_end_time("0:0:0".into());
-        parse_end_time("-1:0".into());
+    }
+    #[test]
+    #[should_panic]
+    fn check_parse_end_time_invaild_m() {
         parse_end_time("0:100".into());
+    }
+    #[test]
+    #[should_panic]
+    fn check_parse_end_time_invaild_length() {
+        parse_end_time("0:0:0".into());
+    }
+    #[test]
+    #[should_panic]
+    fn check_parse_end_time_invaild_h_minus() {
+        parse_end_time("-1:0".into());
+    }
+
+    /// テスト用のインメモリSQLiteのコネクションを作成
+    fn create_sqlite_conn() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute(
+            "
+                CREATE TABLE requests(
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    email TEXT NOT NULL,
+                    song_name TEXT NOT NULL,
+                    artist_name TEXT NOT NULL,
+                    played INTEGER NOT NULL,
+                    uuid TEXT NOT NULL,
+                    arrange INTEGER NOT NULL,
+                    UNIQUE(uuid)
+                );
+            ",
+            params![],
+        )
+        .unwrap();
+        conn
     }
 }
