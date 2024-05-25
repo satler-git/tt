@@ -20,7 +20,7 @@ struct MyConfig {
 }
 
 /// `MyConfig` implements `Default`
-impl ::std::default::Default for MyConfig {
+impl Default for MyConfig {
     fn default() -> Self {
         Self {
             api_key: "".into(),
@@ -253,14 +253,22 @@ async fn play_next(conn: &Connection) {
 #[command(about = "A CLI tool for playing music automatically.", long_about = None)]
 struct Args {
     // "12:30"のように24hで指定する
-    #[arg(short, long, help = "Specify the end time in 24-hour notation, separated by \":\", for example, \"12:30\" minutes. \nCan't be specified at the same time as the duration.")]
+    #[arg(
+        short,
+        long,
+        help = "Specify the end time in 24-hour notation, separated by \":\", for example, \"12:30\" minutes. \nCan't be specified at the same time as the duration."
+    )]
     #[arg(conflicts_with = "duration")]
     end_time: Option<String>,
     // "1h2m3s"的な感じで指定する
-    #[arg(short, long, help = "Specify by integer, separated by h, m, and s, as in \"1h2m3s\". Each can be omitted.")]
+    #[arg(
+        short,
+        long,
+        help = "Specify by integer, separated by h, m, and s, as in \"1h2m3s\". Each can be omitted."
+    )]
     duration: Option<String>,
     #[arg(last = true, help = "Arguments passed directly to mpv.")]
-    mpv_arsg: Option<Vec<String>>
+    mpv_arsg: Option<Vec<String>>,
 }
 
 #[tokio::main]
