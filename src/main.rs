@@ -95,13 +95,19 @@ struct Request {
 
 /// 与えられた単語のリストからvideo_idを取得してmpvで再生します
 /// * `search_word_list` - 検索する単語のリスト
-async fn play_music(search_word_list: [&String; 2]) {
+async fn play_music(search_word_list: [&String; 2], mpv_arsg: &Option<Vec<String>>) {
     println!("Playing {} {}", search_word_list[0], search_word_list[1]);
 
     let video_id = search_youtube(search_word_list).await;
-
+    let mut mpv_options: Vec<String> = vec![];
+    if let Some(mo) = mpv_arsg {
+        mpv_options = mo.clone();
+    }
+    // デフォルトのオプションを追加
+    mpv_options.push("-fs".into());
+    mpv_options.push(video_id.into());
     match Command::new("mpv")
-        .args(["-fs", /* "--volume=50", */ &video_id])
+        .args(mpv_options)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .output()
@@ -113,8 +119,8 @@ async fn play_music(search_word_list: [&String; 2]) {
 
 impl Request {
     /// `play_music()`で再生します
-    async fn play(&self) {
-        play_music([&self.song_name, &self.artist_name]).await;
+    async fn play(&self, mpv_arsg: &Option<Vec<String>>) {
+        play_music([&self.song_name, &self.artist_name], mpv_arsg).await;
     }
 
     fn set_as_played(&self, conn: &Connection) {
@@ -219,7 +225,8 @@ fn comp_time(cfg: &MyConfig) -> bool {
 
 /// SQLiteから次の流すべきリクエストを判断し`play_song()`で再生
 /// * `conn` SQLiteのコネクション
-async fn play_next(conn: &Connection) {
+/// * `mpv_arsg` MPVへのオプションのオプション
+async fn play_next(conn: &Connection, mpv_arsg: &Option<Vec<String>>) {
     // playedがfalseかつ、arrangeが最小(!unique)
     let mut stmt = conn
         .prepare("select id, song_name, artist_name from requests where played = 0 and arrange = (select MIN(arrange) from requests where played = 0)")
@@ -246,7 +253,7 @@ async fn play_next(conn: &Connection) {
 
     let next = requests.choose(&mut rand::thread_rng()).unwrap();
 
-    next.play().await;
+    next.play(mpv_arsg).await;
     next.set_as_played(&conn);
 }
 
@@ -349,14 +356,19 @@ fn parse_duration(duration: String) -> [u32; 3] {
 
 #[tokio::main]
 async fn main() -> Result<(), confy::ConfyError> {
-    let cfg: MyConfig = confy::load("tt", "tt")?;
-    // TODO:
+    let mut cfg: MyConfig = confy::load("tt", "tt")?;
     let args = Args::parse();
+    // argsをcfgに反映
+    if let Some(end_time) = args.end_time {
+        cfg.end_time = parse_end_time(end_time);
+    } else if let Some(duration) = args.duration {
+        cfg.end_time = parse_duration(duration);
+    }
     let conn = init_sqlite().unwrap();
     sync_backend(&cfg, &conn).await.unwrap();
 
     while comp_time(&cfg) {
-        play_next(&conn).await;
+        play_next(&conn, &args.mpv_arsg).await;
         println!("Comp to time: {}", comp_time(&cfg));
     }
 
