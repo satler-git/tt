@@ -4,14 +4,17 @@
 //! * `api_key`
 //! gasのデプロイID
 
-use chrono::{DateTime, FixedOffset, NaiveTime, Utc};
+use chrono::{DateTime, FixedOffset, NaiveTime, Timelike, Utc};
 use clap::Parser;
 use directories::ProjectDirs;
 use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use rand::seq::SliceRandom;
 use rusqlite::{params, Connection, Result};
 use serde_derive::{Deserialize, Serialize};
-use std::process::{Command, Stdio};
+use std::{
+    process::{Command, Stdio},
+    u32,
+};
 
 #[derive(Serialize, Deserialize)]
 struct MyConfig {
@@ -283,10 +286,65 @@ fn parse_end_time(end_time: String) -> [u32; 3] {
 
     // 正しい数じゃないか確認
     if (u32_words[0] >= 24) | (u32_words[1] >= 60) | (str_words.len() != 2) {
-        panic!("The end_time option was not valid.");
+        panic!("The end_time option was invalid.");
     }
 
     [u32_words[0], u32_words[1], 0]
+}
+
+/// `[12, 70, 0]`を`[13, 10, 0]`にmodする関数
+fn mod_time(time: [u32; 3]) -> [u32; 3] {
+    [
+        (time[0] + time[1] / 60 + time[2] / 3600) % 24,
+        (time[1] + time[2] / 60) % 60,
+        time[2] % 60,
+    ]
+}
+
+/// `1h2m30s`の様な入力を`[1, 2, 30]`の様に返す
+/// それぞれ省略可能で例えば`1h30m`が`[1, 30, 0]`
+/// 24時間以上はpanic
+fn parse_duration_diff(duration: String) -> [u32; 3] {
+    let mut h_point = 0;
+    let mut m_point = 0;
+    let mut h = 0;
+    let mut m = 0;
+    let mut s = 0;
+    if duration.contains("h") {
+        h_point = duration.find("h").unwrap();
+        h = String::from(&duration[0..h_point])
+            .parse()
+            .expect("The duration option was invalid.");
+        h_point += 1;
+    }
+    if duration.contains("m") {
+        m_point = duration.find("m").unwrap();
+        m = String::from(&duration[h_point..m_point])
+            .parse()
+            .expect("The duration option was invalid.");
+        m_point += 1;
+    } else if duration.contains("h") {
+        m_point = h_point.clone();
+    }
+    if duration.contains("s") {
+        s = String::from(&duration[m_point..duration.find("s").unwrap()])
+            .parse()
+            .expect("The duration option was invalid.");
+    }
+    mod_time([h, m, s])
+}
+
+/// `parse_duration_diff()`を使用して現在時刻と足しあわせる関数
+fn parse_duration(duration: String) -> [u32; 3] {
+    let diff = parse_duration_diff(duration);
+    let now = Utc::now()
+        .with_timezone(&FixedOffset::east_opt(9 * 3600).unwrap())
+        .time();
+    mod_time([
+        diff[0] + now.hour(),
+        diff[1] + now.minute(),
+        diff[2] + now.second(),
+    ])
 }
 
 #[tokio::main]
@@ -338,6 +396,19 @@ mod tests {
         parse_end_time("-1:0".into());
     }
 
+    #[test]
+    fn check_mod_time() {
+        assert_eq!([2, 0, 0], mod_time([1, 60, 0]));
+        assert_eq!([1, 0, 0], mod_time([0, 0, 3600]));
+    }
+    #[test]
+    fn check_parse_duration() {
+        assert_eq!([1, 2, 3], parse_duration_diff("1h2m3s".into()));
+        assert_eq!([1, 2, 0], parse_duration_diff("1h2m".into()));
+        assert_eq!([0, 2, 3], parse_duration_diff("2m3s".into()));
+        assert_eq!([2, 2, 0], parse_duration_diff("1h62m".into()));
+        assert_eq!([1, 0, 3], parse_duration_diff("1h3s".into()));
+    }
     /// テスト用のインメモリSQLiteのコネクションを作成
     fn create_sqlite_conn() -> Connection {
         let conn = Connection::open_in_memory().unwrap();
