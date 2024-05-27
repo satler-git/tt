@@ -97,7 +97,7 @@ async fn search_youtube(search_word_list: [&String; 2]) -> String {
     }
     // TODO: 検索できなかった場合のエラー処理。理想的にはそのレコード削除?
     println!("Couldn't find video with search.");
-    return "".to_string();
+    return "https://github.com/satler-git/tt/releases/download/v2.1.0/error.wav".to_string();
 }
 
 /// SQLiteから取得し、再生するためのstruct
