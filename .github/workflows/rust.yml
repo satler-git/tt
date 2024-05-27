@@ -11,6 +11,17 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: "v0-rust-${{ matrix.target }}"
+      - run: cargo tree
+      - name: Run tests
+        run: cargo test --verbose
+
   build:
     strategy:
       matrix:
