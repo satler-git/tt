@@ -7,6 +7,7 @@
 use chrono::{DateTime, FixedOffset, NaiveTime, Timelike, Utc};
 use clap::Parser;
 use directories::ProjectDirs;
+use indicatif::ProgressIterator;
 use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use rand::seq::SliceRandom;
 use rusqlite::{params, Connection, Result};
@@ -86,7 +87,8 @@ async fn search_youtube(search_word_list: [&String; 2]) -> String {
 
     let result: YoutubeSearchResult = serde_json::from_str(&body).unwrap();
     for i in &result.items {
-        if i.snippet.duration >= 900 { // 60s * 15m
+        if i.snippet.duration >= 900 {
+            // 60s * 15m
             return format!(
                 "https://www.youtube.com/watch?v={video_id}",
                 video_id = result.items[0].id.videoId.clone()
@@ -95,7 +97,6 @@ async fn search_youtube(search_word_list: [&String; 2]) -> String {
             println!("The video is over 15 minutes long.")
         }
     }
-    // TODO: 検索できなかった場合のエラー処理。理想的にはそのレコード削除?
     println!("Couldn't find video with search.");
     return "https://github.com/satler-git/tt/releases/download/v2.0.1/error.wav".to_string();
 }
@@ -127,7 +128,6 @@ async fn play_music(search_word_list: [&String; 2], mpv_arsg: &Option<Vec<String
         .stdout(Stdio::piped())
         .output()
     {
-        // TODO:
         Err(why) => panic!("Error on executing mpv: {}", why),
         Ok(process) => process,
     };
@@ -219,7 +219,7 @@ async fn sync_backend(cfg: &MyConfig, conn: &Connection) -> Result<(), rusqlite:
         .prepare("select id from requests where email = ?1")
         .unwrap();
 
-    for song in backend_result.contents {
+    for song in backend_result.contents.into_iter().progress() {
         let order = stmt
             .query([&song.mail])
             .unwrap()
@@ -382,7 +382,7 @@ async fn main() -> Result<(), confy::ConfyError> {
     }
     let conn = init_sqlite().unwrap();
     sync_backend(&cfg, &conn).await.unwrap();
-
+    println!("Comp to time: {}", comp_time(&cfg));
     while comp_time(&cfg) {
         play_next(&conn, &args.mpv_arsg).await;
         println!("Comp to time: {}", comp_time(&cfg));
