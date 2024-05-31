@@ -326,7 +326,6 @@ fn mod_time(time: [u32; 3]) -> [u32; 3] {
 
 /// `1h2m30s`の様な入力を`[1, 2, 30]`の様に返す
 /// それぞれ省略可能で例えば`1h30m`が`[1, 30, 0]`
-/// 24時間以上はpanic
 fn parse_duration_diff(duration: String) -> [u32; 3] {
     let mut h_point = 0;
     let mut m_point = 0;
@@ -392,6 +391,7 @@ async fn main() -> Result<(), confy::ConfyError> {
 }
 
 #[cfg(test)]
+#[allow(dead_code)]
 mod tests {
     use super::*;
 
