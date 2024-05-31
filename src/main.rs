@@ -93,7 +93,7 @@ async fn search_youtube(search_word_list: [&String; 2]) -> String {
             // 60s * 15m
             return format!(
                 "https://www.youtube.com/watch?v={video_id}",
-                video_id = result.items[0].id.videoId.clone()
+                video_id = i.id.videoId.clone()
             );
         /*
         } else {
