@@ -53,7 +53,7 @@ struct YoutubeSearchResult {
 #[derive(Deserialize, Debug)]
 struct YoutubeSearchItem {
     id: YoutubeSearchId,
-    snippet: YoutubeSearchSnippet,
+    /* snippet: YoutubeSearchSnippet, */
 }
 
 #[allow(non_snake_case)]
@@ -62,10 +62,12 @@ struct YoutubeSearchId {
     videoId: String,
 }
 
+/*
 #[derive(Deserialize, Debug)]
 struct YoutubeSearchSnippet {
     duration: i64,
 }
+*/
 
 /// 与えられた単語のリストからvideo_idを取得します
 /// * `search_word_list` - 検索する単語のリスト
@@ -87,15 +89,17 @@ async fn search_youtube(search_word_list: [&String; 2]) -> String {
 
     let result: YoutubeSearchResult = serde_json::from_str(&body).unwrap();
     for i in &result.items {
-        if i.snippet.duration >= 900 {
+        // if i.snippet.duration >= 900 {
             // 60s * 15m
             return format!(
                 "https://www.youtube.com/watch?v={video_id}",
                 video_id = result.items[0].id.videoId.clone()
             );
+        /*
         } else {
             println!("The video is over 15 minutes long.")
         }
+        */
     }
     println!("Couldn't find video with search.");
     return "https://github.com/satler-git/tt/releases/download/v2.0.1/error.wav".to_string();
