@@ -322,7 +322,7 @@ fn parse_end_time(end_time: String) -> [u32; 3] {
 /// `[12, 70, 0]`を`[13, 10, 0]`にmodする関数
 fn mod_time(time: [u32; 3]) -> [u32; 3] {
     [
-        (time[0] + time[1] / 60 + time[2] / 3600) % 24,
+        (time[0] + (time[1] + time[2] / 60) / 60) % 24,
         (time[1] + time[2] / 60) % 60,
         time[2] % 60,
     ]
@@ -432,6 +432,7 @@ mod tests {
     fn check_mod_time() {
         assert_eq!([2, 0, 0], mod_time([1, 60, 0]));
         assert_eq!([1, 0, 0], mod_time([0, 0, 3600]));
+        assert_eq!([1, 0, 0], mod_time([0, 59, 60]));
     }
     #[test]
     fn check_parse_duration() {
