@@ -1,8 +1,9 @@
 {
-	"name": "Rust",
-	"image": "mcr.microsoft.com/devcontainers/rust:1-1-bookworm",
-	"features": {
-		"ghcr.io/lee-orr/rusty-dev-containers/cargo-watch:0": {},
-		"ghcr.io/lee-orr/rusty-dev-containers/rust_windows_msvc:0": {}
-	}
+  "name": "Rust",
+  "image": "mcr.microsoft.com/devcontainers/rust:1-1-bookworm",
+  "features": {
+    "ghcr.io/devcontainers/features/rust:1": {},
+    "ghcr.io/lee-orr/rusty-dev-containers/cargo-watch:0": {},
+    "ghcr.io/lee-orr/rusty-dev-containers/rust_windows_msvc:0": {}
+  }
 }
