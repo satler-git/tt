@@ -16,6 +16,8 @@ use std::{
     process::{Command, Stdio},
     u32,
 };
+use env_logger;
+use log::{error, warn, info, debug};
 
 #[derive(Serialize, Deserialize)]
 struct MyConfig {
@@ -91,17 +93,19 @@ async fn search_youtube(search_word_list: [&String; 2]) -> String {
     for i in &result.items {
         // if i.snippet.duration >= 900 {
             // 60s * 15m
-            return format!(
+            let url = format!(
                 "https://www.youtube.com/watch?v={video_id}",
                 video_id = i.id.videoId.clone()
             );
+            debug!("Found the url: {}", url);
+            return url
         /*
         } else {
             println!("The video is over 15 minutes long.")
         }
         */
     }
-    println!("Couldn't find video with search.");
+    error!("Couldn't find video with search.");
     return "https://github.com/satler-git/tt/releases/download/v2.0.1/error.wav".to_string();
 }
 
@@ -116,7 +120,7 @@ struct Request {
 /// 与えられた単語のリストからvideo_idを取得してmpvで再生します
 /// * `search_word_list` - 検索する単語のリスト
 async fn play_music(search_word_list: [&String; 2], mpv_arsg: &Option<Vec<String>>) {
-    println!("Playing {} {}", search_word_list[0], search_word_list[1]);
+    info!("Playing {} {}", search_word_list[0], search_word_list[1]);
 
     let video_id = search_youtube(search_word_list).await;
     let mut mpv_options: Vec<String> = vec![];
@@ -154,7 +158,7 @@ impl Request {
 
 /// SQLiteをセットアップしコネクションを返す
 fn init_sqlite() -> Result<Connection, rusqlite::Error> {
-    println!("Initialing SQLite");
+    info!("Initialing SQLite");
 
     let binding = ProjectDirs::from("com", "", "tt").unwrap();
     let project_dir = binding.config_dir();
@@ -163,7 +167,7 @@ fn init_sqlite() -> Result<Connection, rusqlite::Error> {
     let conn = Connection::open(&db_path)?;
 
     let is_autocommit = conn.is_autocommit();
-    println!("    Is auto-commit mode: {}", is_autocommit);
+    debug!("    Is auto-commit mode: {}", is_autocommit);
 
     conn.execute(
         "
@@ -203,7 +207,7 @@ struct BackendSong {
 /// * `cfg` アプリの設定
 /// * `conn` SQLiteへのコネクション
 async fn sync_backend(cfg: &MyConfig, conn: &Connection) -> Result<(), rusqlite::Error> {
-    println!("Syncing SQLite");
+    info!("Syncing SQLite");
 
     let request_url = format!(
         "https://script.google.com/macros/s/{api_key}/exec",
@@ -375,6 +379,7 @@ fn parse_duration(duration: String) -> [u32; 3] {
 
 #[tokio::main]
 async fn main() -> Result<(), confy::ConfyError> {
+    env_logger::init();
     let mut cfg: MyConfig = confy::load("tt", "tt")?;
     let args = Args::parse();
     // argsをcfgに反映
@@ -385,10 +390,10 @@ async fn main() -> Result<(), confy::ConfyError> {
     }
     let conn = init_sqlite().unwrap();
     sync_backend(&cfg, &conn).await.unwrap();
-    println!("Comp to time: {}", comp_time(&cfg));
+    debug!("Comp to time: {}", comp_time(&cfg));
     while comp_time(&cfg) {
         play_next(&conn, &args.mpv_arsg).await;
-        println!("Comp to time: {}", comp_time(&cfg));
+        debug!("Comp to time: {}", comp_time(&cfg));
     }
 
     Ok(())
