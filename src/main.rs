@@ -1,13 +1,17 @@
 //! ## configについて
 //! * `end_time`: [h, m, s]
 //! 24h表記
-//! * `api_key`
+//! * `gas_api_key`
 //! gasのデプロイID
+//! * `youtube_api_key`
+//! Youtube Data APIのキー
 
 use chrono::{DateTime, FixedOffset, NaiveTime, Timelike, Utc};
 use clap::Parser;
 use directories::ProjectDirs;
+use env_logger;
 use indicatif::ProgressIterator;
+use log::{debug, error, info, warn};
 use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use rand::seq::SliceRandom;
 use rusqlite::{params, Connection, Result};
@@ -16,12 +20,11 @@ use std::{
     process::{Command, Stdio},
     u32,
 };
-use env_logger;
-use log::{error, warn, info, debug};
 
 #[derive(Serialize, Deserialize)]
 struct MyConfig {
-    api_key: String,
+    gas_api_key: String,
+    youtube_api_key: String,
     end_time: [u32; 3],
 }
 
@@ -29,7 +32,8 @@ struct MyConfig {
 impl Default for MyConfig {
     fn default() -> Self {
         Self {
-            api_key: "".into(),
+            gas_api_key: "".into(),
+            youtube_api_key: "".into(),
             end_time: [13, 5, 0],
         }
     }
@@ -74,12 +78,13 @@ struct YoutubeSearchSnippet {
 /// 与えられた単語のリストからvideo_idを取得します
 /// * `search_word_list` - 検索する単語のリスト
 /// Youtubeのリンクとして返します
-async fn search_youtube(search_word_list: [&String; 2]) -> String {
+async fn search_youtube(search_word_list: [&String; 2], cfg: &MyConfig) -> String {
     let [name, artist] = search_word_list;
     let request_url = format!(
-        "https://yt.lemnoslife.com/search?part=id,snippet&q={name}+{artist}&type=video",
+        "https://www.googleapis.com/youtube/v3/search?part=id&q={name}+{artist}&type=video&regionCode=jp&key={key}",
         name = utf8_percent_encode(&name, NON_ALPHANUMERIC).to_string(),
-        artist = utf8_percent_encode(&artist, NON_ALPHANUMERIC).to_string()
+        artist = utf8_percent_encode(&artist, NON_ALPHANUMERIC).to_string(),
+        key = cfg.youtube_api_key,
     );
 
     let body = reqwest::get(&request_url)
@@ -92,13 +97,13 @@ async fn search_youtube(search_word_list: [&String; 2]) -> String {
     let result: YoutubeSearchResult = serde_json::from_str(&body).unwrap();
     for i in &result.items {
         // if i.snippet.duration >= 900 {
-            // 60s * 15m
-            let url = format!(
-                "https://www.youtube.com/watch?v={video_id}",
-                video_id = i.id.videoId.clone()
-            );
-            debug!("Found the url: {}", url);
-            return url
+        // 60s * 15m
+        let url = format!(
+            "https://www.youtube.com/watch?v={video_id}",
+            video_id = i.id.videoId.clone()
+        );
+        debug!("Found the url: {}", url);
+        return url;
         /*
         } else {
             println!("The video is over 15 minutes long.")
@@ -119,10 +124,14 @@ struct Request {
 
 /// 与えられた単語のリストからvideo_idを取得してmpvで再生します
 /// * `search_word_list` - 検索する単語のリスト
-async fn play_music(search_word_list: [&String; 2], mpv_arsg: &Option<Vec<String>>) {
+async fn play_music(
+    search_word_list: [&String; 2],
+    mpv_arsg: &Option<Vec<String>>,
+    cfg: &MyConfig,
+) {
     info!("Playing {} {}", search_word_list[0], search_word_list[1]);
 
-    let video_id = search_youtube(search_word_list).await;
+    let video_id = search_youtube(search_word_list, cfg).await;
     let mut mpv_options: Vec<String> = vec![];
     if let Some(mo) = mpv_arsg {
         mpv_options = mo.clone();
@@ -143,8 +152,8 @@ async fn play_music(search_word_list: [&String; 2], mpv_arsg: &Option<Vec<String
 
 impl Request {
     /// `play_music()`で再生します
-    async fn play(&self, mpv_arsg: &Option<Vec<String>>) {
-        play_music([&self.song_name, &self.artist_name], mpv_arsg).await;
+    async fn play(&self, mpv_arsg: &Option<Vec<String>>, cfg: &MyConfig) {
+        play_music([&self.song_name, &self.artist_name], mpv_arsg, cfg).await;
     }
 
     fn set_as_played(&self, conn: &Connection) {
@@ -211,7 +220,7 @@ async fn sync_backend(cfg: &MyConfig, conn: &Connection) -> Result<(), rusqlite:
 
     let request_url = format!(
         "https://script.google.com/macros/s/{api_key}/exec",
-        api_key = cfg.api_key
+        api_key = cfg.gas_api_key
     );
 
     let body = reqwest::get(&request_url)
@@ -250,7 +259,7 @@ fn comp_time(cfg: &MyConfig) -> bool {
 /// SQLiteから次の流すべきリクエストを判断し`play_song()`で再生
 /// * `conn` SQLiteのコネクション
 /// * `mpv_arsg` MPVへのオプションのオプション
-async fn play_next(conn: &Connection, mpv_arsg: &Option<Vec<String>>) {
+async fn play_next(conn: &Connection, mpv_arsg: &Option<Vec<String>>, cfg: &MyConfig) {
     // playedがfalseかつ、arrangeが最小(!unique)
     let mut stmt = conn
         .prepare("select id, song_name, artist_name from requests where played = 0 and arrange = (select MIN(arrange) from requests where played = 0)")
@@ -277,7 +286,7 @@ async fn play_next(conn: &Connection, mpv_arsg: &Option<Vec<String>>) {
 
     let next = requests.choose(&mut rand::thread_rng()).unwrap();
 
-    next.play(mpv_arsg).await;
+    next.play(mpv_arsg, cfg).await;
     next.set_as_played(&conn);
 }
 
@@ -392,7 +401,7 @@ async fn main() -> Result<(), confy::ConfyError> {
     sync_backend(&cfg, &conn).await.unwrap();
     debug!("Comp to time: {}", comp_time(&cfg));
     while comp_time(&cfg) {
-        play_next(&conn, &args.mpv_arsg).await;
+        play_next(&conn, &args.mpv_arsg, &cfg).await;
         debug!("Comp to time: {}", comp_time(&cfg));
     }
 
