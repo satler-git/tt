@@ -55,10 +55,14 @@ jobs:
       if: matrix.os == 'windows-latest'
       with:
         name: nighty-${{ github.sha }}-${{ matrix.target }}
-        path: ./target/release/tt.exe
+        path: |
+          ./target/release/tt.exe
+          ./LICENSE
     - name: Upload artifacts(not Windows)
       uses: actions/upload-artifact@v4
       if: matrix.os != 'windows-latest'
       with:
         name: nighty-${{ github.sha }}-${{ matrix.target }}
-        path: ./target/release/tt
+        path: |
+          ./target/release/tt.exe
+          ./LICENSE
