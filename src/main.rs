@@ -93,6 +93,8 @@ async fn search_youtube(search_word_list: [&String; 2], cfg: &MyConfig) -> Strin
         .text()
         .await
         .unwrap();
+    
+    debug!("{}", &body);
 
     let result: YoutubeSearchResult = serde_json::from_str(&body).unwrap();
     for i in &result.items {
