@@ -21,7 +21,7 @@ use std::{
     u32,
 };
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 struct MyConfig {
     gas_api_key: String,
     youtube_api_key: String,
