@@ -112,7 +112,9 @@ async fn search_youtube(search_word_list: [&String; 2], cfg: &MyConfig) -> Strin
         }
         */
     }
-    error!("Couldn't find video with search.");
+    error!("Couldn't find video with searching.");
+    error!("{search_word_list:?}");
+    error!("{cfg:?}");
     return "https://github.com/satler-git/tt/releases/download/v2.0.1/error.wav".to_string();
 }
 
@@ -283,7 +285,7 @@ async fn play_next(conn: &Connection, mpv_arsg: &Option<Vec<String>>, cfg: &MyCo
     }
 
     if requests.len() == 0 {
-        panic!("Couldn't find next to play");
+        panic!("Couldn't find the next to play");
     }
 
     let next = requests.choose(&mut rand::thread_rng()).unwrap();
