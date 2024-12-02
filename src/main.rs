@@ -240,16 +240,18 @@ async fn sync_backend(cfg: &MyConfig, conn: &Connection) -> Result<(), rusqlite:
         .prepare("select id from requests where email = ?1")
         .unwrap();
 
+    let tx = conn.transaction()?;
+
     for song in backend_result.contents.into_iter().progress() {
-        let order = stmt
+        let order = stmt // TODO: ここも非効率
             .query([&song.mail])
             .unwrap()
             .mapped(|_row| Ok(0))
             .count()
             + 1;
-        conn.execute("INSERT OR IGNORE INTO requests(email, song_name, artist_name, played, uuid, arrange) VALUES(?1, ?2, ?3, 0, ?4, ?5)", params![&song.mail, &song.song_name, &song.artist_name, &song.uuid, &order])?;
+        tx.execute("INSERT OR IGNORE INTO requests(email, song_name, artist_name, played, uuid, arrange) VALUES(?1, ?2, ?3, 0, ?4, ?5)", params![&song.mail, &song.song_name, &song.artist_name, &song.uuid, &order])?;
     }
-    Ok(())
+    tx.commit()
 }
 
 /// `comp_end_time()`のラップ
