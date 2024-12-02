@@ -93,7 +93,7 @@ async fn search_youtube(search_word_list: [&String; 2], cfg: &MyConfig) -> Strin
         .text()
         .await
         .unwrap();
-    
+
     debug!("{}", &body);
 
     let result: YoutubeSearchResult = serde_json::from_str(&body).unwrap();
@@ -219,7 +219,7 @@ struct BackendSong {
 /// Backendと同期するための関数
 /// * `cfg` アプリの設定
 /// * `conn` SQLiteへのコネクション
-async fn sync_backend(cfg: &MyConfig, conn: &Connection) -> Result<(), rusqlite::Error> {
+async fn sync_backend(cfg: &MyConfig, conn: &mut Connection) -> Result<(), rusqlite::Error> {
     info!("Syncing SQLite");
 
     let request_url = format!(
@@ -236,19 +236,21 @@ async fn sync_backend(cfg: &MyConfig, conn: &Connection) -> Result<(), rusqlite:
 
     let backend_result: BackendResult = serde_json::from_str(&body).unwrap();
 
-    let mut stmt = conn
-        .prepare("select id from requests where email = ?1")
-        .unwrap();
+    let emails = {
+        let mut stmt = conn.prepare("select email from requests")?;
+        let rows = stmt.query_map([], |row| Ok(row.get::<usize, String>(0)?))?;
+
+        let mut v = vec![];
+        for ri in rows {
+            v.push(ri?);
+        }
+        v
+    };
 
     let tx = conn.transaction()?;
 
     for song in backend_result.contents.into_iter().progress() {
-        let order = stmt // TODO: ここも非効率
-            .query([&song.mail])
-            .unwrap()
-            .mapped(|_row| Ok(0))
-            .count()
-            + 1;
+        let order = emails.iter().filter(|s| song.mail == **s).count() + 1;
         tx.execute("INSERT OR IGNORE INTO requests(email, song_name, artist_name, played, uuid, arrange) VALUES(?1, ?2, ?3, 0, ?4, ?5)", params![&song.mail, &song.song_name, &song.artist_name, &song.uuid, &order])?;
     }
     tx.commit()
@@ -403,8 +405,8 @@ async fn main() -> Result<(), confy::ConfyError> {
     } else if let Some(duration) = args.duration {
         cfg.end_time = parse_duration(duration);
     }
-    let conn = init_sqlite().unwrap();
-    sync_backend(&cfg, &conn).await.unwrap();
+    let mut conn = init_sqlite().unwrap();
+    sync_backend(&cfg, &mut conn).await.unwrap();
     debug!("Comp to time: {}", comp_time(&cfg));
     while comp_time(&cfg) {
         play_next(&conn, &args.mpv_arsg, &cfg).await;
