@@ -104,7 +104,7 @@ async fn search_youtube(search_word_list: [&String; 2], cfg: &MyConfig) -> Strin
             "https://www.youtube.com/watch?v={video_id}",
             video_id = i.id.videoId.clone()
         );
-        debug!("Found the url: {}", url);
+        info!("Found the url: {}", url);
         return url;
         /*
         } else {
@@ -396,7 +396,11 @@ fn parse_duration(duration: String) -> [u32; 3] {
 
 #[tokio::main]
 async fn main() -> Result<(), confy::ConfyError> {
+    if std::env::var("RUST_LOG").is_err() {
+        std::env::set_var("RUST_LOG", "info")
+    }
     env_logger::init();
+
     let mut cfg: MyConfig = confy::load("tt", "tt")?;
     let args = Args::parse();
     // argsをcfgに反映
