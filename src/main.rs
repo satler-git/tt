@@ -411,10 +411,10 @@ async fn main() -> Result<(), confy::ConfyError> {
     }
     let mut conn = init_sqlite().unwrap();
     sync_backend(&cfg, &mut conn).await.unwrap();
-    debug!("Comp to time: {}", comp_time(&cfg));
+    info!("Comparing to time: {}", comp_time(&cfg));
     while comp_time(&cfg) {
         play_next(&conn, &args.mpv_arsg, &cfg).await;
-        debug!("Comp to time: {}", comp_time(&cfg));
+        info!("Comparing to time: {}", comp_time(&cfg));
     }
 
     Ok(())
