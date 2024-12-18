@@ -64,5 +64,5 @@ jobs:
       with:
         name: nighty-${{ github.sha }}-${{ matrix.target }}
         path: |
-          ./target/release/tt.exe
+          ./target/release/tt
           ./LICENSE
