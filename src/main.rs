@@ -236,22 +236,12 @@ async fn sync_backend(cfg: &MyConfig, conn: &mut Connection) -> Result<(), rusql
 
     let backend_result: BackendResult = serde_json::from_str(&body).unwrap();
 
-    let emails = {
-        let mut stmt = conn.prepare("select email from requests")?;
-        let rows = stmt.query_map([], |row| Ok(row.get::<usize, String>(0)?))?;
-
-        let mut v = vec![];
-        for ri in rows {
-            v.push(ri?);
-        }
-        v
-    };
-
     let tx = conn.transaction()?;
 
     for song in backend_result.contents.into_iter().progress() {
-        let order = emails.iter().filter(|s| song.mail == **s).count() + 1;
-        tx.execute("INSERT OR IGNORE INTO requests(email, song_name, artist_name, played, uuid, arrange) VALUES(?1, ?2, ?3, 0, ?4, ?5)", params![&song.mail, &song.song_name, &song.artist_name, &song.uuid, &order])?;
+        // TODO: Peformance is bad.
+        // ここでいちいち取得しないと一度に同じ人から複数リクエストが来たときに正しくアレンジを指定できない
+        tx.execute("INSERT OR IGNORE INTO requests(email, song_name, artist_name, played, uuid, arrange) VALUES(?1, ?2, ?3, 0, ?4, (SELECT COUNT(*) + 1 FROM requests WHERE email = ?1))", params![&song.mail, &song.song_name, &song.artist_name, &song.uuid])?;
     }
     tx.commit()
 }
