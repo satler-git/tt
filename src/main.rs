@@ -118,7 +118,7 @@ async fn search_youtube(search_word_list: [&String; 2], cfg: &MyConfig) -> Strin
 
     for _ in 0..5 {
         let res = search_send(&request_url).await;
-        if let Ok(res_url) = res.is_ok() {
+        if let Ok(res_url) = res {
             return res_url;
         } else {
             error!("Error in search: {res:?}");
