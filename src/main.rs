@@ -75,6 +75,35 @@ struct YoutubeSearchSnippet {
 }
 */
 
+async fn search_send(url: &str) -> Result<String, String> {
+        let body = reqwest::get(url)
+        .await
+        .map_err(|err| err.to_string())?
+        .text()
+        .await
+        .map_err(|err| err.to_string())?;
+
+    debug!("{}", &body);
+
+    let result: YoutubeSearchResult = serde_json::from_str(&body).map_err(|err| err.to_string())?;
+    for i in &result.items {
+        // if i.snippet.duration >= 900 {
+        // 60s * 15m
+        let url = format!(
+            "https://www.youtube.com/watch?v={video_id}",
+            video_id = i.id.videoId.clone()
+        );
+        info!("Found the url: {}", url);
+        return Ok(url);
+        /*
+        } else {
+            println!("The video is over 15 minutes long.")
+        }
+        */
+    }
+    Err("No items found.".into())
+}
+
 /// 与えられた単語のリストからvideo_idを取得します
 /// * `search_word_list` - 検索する単語のリスト
 /// Youtubeのリンクとして返します
@@ -87,35 +116,22 @@ async fn search_youtube(search_word_list: [&String; 2], cfg: &MyConfig) -> Strin
         key = cfg.youtube_api_key,
     );
 
-    let body = reqwest::get(&request_url)
-        .await
-        .unwrap()
-        .text()
-        .await
-        .unwrap();
-
-    debug!("{}", &body);
-
-    let result: YoutubeSearchResult = serde_json::from_str(&body).unwrap();
-    for i in &result.items {
-        // if i.snippet.duration >= 900 {
-        // 60s * 15m
-        let url = format!(
-            "https://www.youtube.com/watch?v={video_id}",
-            video_id = i.id.videoId.clone()
-        );
-        info!("Found the url: {}", url);
-        return url;
-        /*
+    for _ in 0..5 {
+        let res = search_send(&request_url).await;
+        if res.is_ok() {
+            return res.unwrap();
         } else {
-            println!("The video is over 15 minutes long.")
+            error!("Error in search: {res:?}");
+            warn!("sleeping");
+            use std::{thread, time};
+            thread::sleep(time::Duration::from_secs(1));       
         }
-        */
     }
+
     error!("Couldn't find video with searching.");
     error!("{search_word_list:?}");
     error!("{cfg:?}");
-    return "https://github.com/satler-git/tt/releases/download/v2.0.1/error.wav".to_string();
+    "https://github.com/satler-git/tt/releases/download/v2.0.1/error.wav".to_string()
 }
 
 /// SQLiteから取得し、再生するためのstruct
