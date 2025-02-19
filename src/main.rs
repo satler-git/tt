@@ -101,6 +101,7 @@ async fn search_send(url: &str) -> Result<String, String> {
         }
         */
     }
+    Err("No items found.".into())
 }
 
 /// 与えられた単語のリストからvideo_idを取得します
@@ -115,7 +116,7 @@ async fn search_youtube(search_word_list: [&String; 2], cfg: &MyConfig) -> Strin
         key = cfg.youtube_api_key,
     );
 
-    for i in 0..5 {
+    for _ in 0..5 {
         let res = search_send(&request_url).await;
         if res.is_ok() {
             return res.unwrap();
@@ -130,7 +131,7 @@ async fn search_youtube(search_word_list: [&String; 2], cfg: &MyConfig) -> Strin
     error!("Couldn't find video with searching.");
     error!("{search_word_list:?}");
     error!("{cfg:?}");
-    return "https://github.com/satler-git/tt/releases/download/v2.0.1/error.wav".to_string();
+    "https://github.com/satler-git/tt/releases/download/v2.0.1/error.wav".to_string()
 }
 
 /// SQLiteから取得し、再生するためのstruct
